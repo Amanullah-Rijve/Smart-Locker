@@ -4,16 +4,17 @@ import dotenv from 'dotenv';
 import { connectDB } from "./src/config/db.js";
 import authRoutes from "./src/routes/auth.routes.js";
 import otpRoutes from "./src/routes/otp.routes.js";
+import lockerRoutes from "./src/routes/locker.routes.js";
+import adminRoutes from "./src/routes/admin.routes.js";
+import { startSessionExpiryJob, startNightlyResetJob } from "./src/jobs/scheduler.js";
 
 dotenv.config();
 
 const app = express();
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Health check
 app.get("/health", (req, res) => {
   res.json({
     success: true,
@@ -22,11 +23,11 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/otp", otpRoutes);
+app.use("/api/locker", lockerRoutes);
+app.use("/api/admin", adminRoutes);
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -34,11 +35,12 @@ app.use((req, res) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`🚀 Server running at http://localhost:${PORT}`);
+    console.log(` Server running at http://localhost:${PORT}`);
+    startSessionExpiryJob();
+    startNightlyResetJob();
   });
 });

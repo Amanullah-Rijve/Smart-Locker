@@ -18,6 +18,7 @@ const transporter = nodemailer.createTransport({
 });
 
 // ─── OTP email পাঠাও ─────────────────────────────────────
+try{
 async function sendOTPEmail(email, otp, name) {
     await transporter.sendMail({
     from: `"Smart Locker System" <${process.env.MAIL_USER}>`,
@@ -31,6 +32,9 @@ async function sendOTPEmail(email, otp, name) {
         <p>If you did not request this, ignore this email.</p>
     `,
     });
+}
+}catch(mailErr){
+console.error("Mail error (non-critical):", mailErr.message);
 }
 
 // ─── OTP generate ─────────────────────────────────────────

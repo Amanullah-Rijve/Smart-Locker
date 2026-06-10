@@ -30,11 +30,9 @@ export const scanCard = async (req, res) => {
 
     // ── Step 1: Student আছে কিনা check ──────────────────
     const [students] = await conn.query(
-      `SELECT id, name, student_code, department 
-       FROM students 
-       WHERE card_uid = ? AND is_active = TRUE`,
-      [card_uid]
-    );
+  "SELECT id, name, student_code FROM students WHERE card_uid = ? AND is_active = TRUE",
+  [card_uid]
+);
 
     // Student নেই — registration দরকার
     if (!students.length) {

@@ -77,34 +77,26 @@ export const registerStudent = async (req, res) => {
     }
 
     // ── Pending এ already আছে কিনা check ────────────────
-    // থাকলে update করো — মানে আবার চেষ্টা করছে
     const [pending] = await pool.query(
       "SELECT id FROM pending_registrations WHERE card_uid = ?",
       [card_uid]
     );
 
     if (pending.length) {
-      // পুরনো pending entry update করো
       await pool.query(
-        `UPDATE pending_registrations 
-         SET name = ?, student_code = ?, email = ?, phone = ?
-         WHERE card_uid = ?`,
+        "UPDATE pending_registrations SET name = ?, student_code = ?, email = ?, phone = ? WHERE card_uid = ?",
         [name, student_code, email, phone, card_uid]
       );
     } else {
-      // নতুন pending entry insert করো
       await pool.query(
-        `INSERT INTO pending_registrations 
-         (card_uid, name, student_code, email, phone) 
-         VALUES (?, ?, ?, ?, ?)`,
+        "INSERT INTO pending_registrations (card_uid, name, student_code, email, phone) VALUES (?, ?, ?, ?, ?)",
         [card_uid, name, student_code, email, phone]
       );
     }
 
     // ── আগের OTP delete করো ─────────────────────────────
     await pool.query(
-      `DELETE FROM otp_verifications 
-       WHERE email = ? AND purpose = 'registration'`,
+      "DELETE FROM otp_verifications WHERE email = ? AND purpose = 'registration'",
       [email]
     );
 
@@ -116,14 +108,16 @@ export const registerStudent = async (req, res) => {
 
     // ── OTP save করো ─────────────────────────────────────
     await pool.query(
-      `INSERT INTO otp_verifications 
-       (email, otp_code, purpose, expires_at) 
-       VALUES (?, ?, 'registration', ?)`,
+      "INSERT INTO otp_verifications (email, otp_code, purpose, expires_at) VALUES (?, ?, 'registration', ?)",
       [email, otp, expiresAt]
     );
 
-    // ── Email পাঠাও ──────────────────────────────────────
-    await sendRegistrationOTP(email, otp, name);
+    // ── Email পাঠাও — fail হলেও registration থামবে না ───
+    try {
+      await sendRegistrationOTP(email, otp, name);
+    } catch (mailErr) {
+      console.error("Mail error (non-critical):", mailErr.message);
+    }
 
     return res.status(200).json({
       success: true,
@@ -158,12 +152,7 @@ export const verifyRegistration = async (req, res) => {
   try {
     // ── OTP খোঁজো ────────────────────────────────────────
     const [otpRows] = await pool.query(
-      `SELECT * FROM otp_verifications 
-       WHERE email = ? 
-       AND purpose = 'registration' 
-       AND is_used = FALSE
-       ORDER BY created_at DESC 
-       LIMIT 1`,
+      "SELECT * FROM otp_verifications WHERE email = ? AND purpose = 'registration' AND is_used = FALSE ORDER BY created_at DESC LIMIT 1",
       [email]
     );
 
@@ -212,26 +201,20 @@ export const verifyRegistration = async (req, res) => {
     const pending = pendingRows[0];
 
     // ── Transaction — pending → students ─────────────────
-    // দুটো কাজ একসাথে হবে — একটা fail হলে দুটোই cancel
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
 
-      // students table এ insert করো
       await conn.query(
-        `INSERT INTO students 
-         (card_uid, student_code, name, email, phone) 
-         VALUES (?, ?, ?, ?, ?)`,
+        "INSERT INTO students (card_uid, student_code, name, email, phone) VALUES (?, ?, ?, ?, ?)",
         [pending.card_uid, pending.student_code, pending.name, pending.email, pending.phone]
       );
 
-      // pending_registrations থেকে delete করো
       await conn.query(
         "DELETE FROM pending_registrations WHERE id = ?",
         [pending.id]
       );
 
-      // OTP used mark করো
       await conn.query(
         "UPDATE otp_verifications SET is_used = TRUE WHERE id = ?",
         [otpRecord.id]
